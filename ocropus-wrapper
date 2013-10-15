@@ -1,0 +1,172 @@
+#!/usr/bin/python
+
+import os
+import sys
+import shutil
+import tempfile
+import subprocess
+
+#
+#    Simple wrapper for ocropus, written by Willem Jan Faber for the 
+#    succeed project (http://succeed-project.eu/)
+# 
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+PATH_TO_OCROPUS = '/usr/local/bin'
+PATH_TO_SYSTEM_TMP = tempfile.gettempdir()
+
+usage = '''ocropus-wrapper [operation] path_to_input path_to_output
+
+Use one of the following operations:
+    either
+	-bin=nlbin
+	-bin=sauvola
+    or
+	-dewarp
+    or 
+	-segmentation
+    or
+	-hocr
+    or
+	-all (walks through all steps)
+    '''
+
+def bin(inputfile, outputdir, nlbin=True, sauvola=False):
+    if nlbin:
+	p=os.popen(PATH_TO_OCROPUS + os.sep + "ocropus-nlbin " + inputfile + " -o " + outputdir)
+	print p.read()
+	return
+    else:
+	p=os.popen(PATH_TO_OCROPUS + os.sep + "ocropus-sauvola " + inputfile + " -o " + outputdir)
+	print p.read()
+	return
+
+def dewarp(inputfile, outputdir):
+    shutil.copy(inputfile, outputdir)
+    cwd = outputdir + os.sep + inputfile.split(os.sep)[-1]
+    out=subprocess.Popen([PATH_TO_OCROPUS + os.sep + "ocropus-ldewarp " + cwd], cwd=outputdir, stdout=subprocess.PIPE, shell=True).communicate()[0]
+    print out
+    os.remove(cwd)
+
+def segmentation(inputfile, outputdir):
+    copy = False
+    if not inputfile.endswith('.bin.png'):
+	outfile = inputfile.split(os.sep)[-1]
+	outfile = outfile.split('.')[0]
+	outfile = outputdir + os.sep + outfile + ".bin.png"
+	shutil.copyfile(inputfile, outfile)
+	copy = True
+    else:
+	outfile = inputfile
+    cwd = outfile #inputfile.split(os.sep)[-1]
+    out=subprocess.Popen([PATH_TO_OCROPUS + os.sep + "ocropus-gpageseg " + cwd], cwd=outputdir, stdout=subprocess.PIPE, shell=True).communicate()[0]
+    print out
+    if copy:
+        os.remove(cwd)
+
+def hocr(inputfile, outputdir, unzip=True):
+    # ocropus-rpred 'temp/????/??????.bin.png'
+    # ocropus-hocr 'temp/????.bin.png' -o temp.html
+    #  unzip -o /usr/local/apache2/htdocs/testfiles/gocr.zip  -d /tmp/
+    if unzip:
+        out=subprocess.Popen("unzip -o " + inputfile + " -d " + outputdir, shell=True, stdout=subprocess.PIPE).communicate()[0]
+        print out
+    outputdir = outputdir + os.sep + "0001"
+    out=subprocess.Popen([PATH_TO_OCROPUS + os.sep + "ocropus-rpred " + outputdir + os.sep+  "*.bin.png"], cwd=outputdir, stdout=subprocess.PIPE, shell=True).communicate()[0]
+    print out
+    upper = os.path.sep.join(outputdir.split(os.sep)[:-1])
+    outfile = upper + os.sep + "out.html"
+    print outfile
+    out=subprocess.Popen([PATH_TO_OCROPUS + os.sep + "ocropus-hocr " + upper + os.sep+  "*.bin.png -o "+ outfile], cwd=outputdir, stdout=subprocess.PIPE, shell=True).communicate()[0]
+    print out
+
+def wrapper_main(args):
+    if len(args) == 1:
+	print usage
+	sys.exit(-1)
+
+    args = args[1:]
+    files_given = False
+
+    for item in args:
+	if not item.startswith('-'):
+	    files_given = item
+	    break
+
+    if not files_given:
+	print usage
+	sys.exit(-1)
+
+    if not os.path.isfile(files_given):
+	if not os.path.isdir(files_given):
+	    print ("Could not open " + files_given)
+	    sys.exit(-1)
+    
+    output_given = False
+
+    for item in args:
+	if not item.startswith('-') and not item == files_given:
+	    output_given = os.path.abspath(item)
+	    break
+
+    if not output_given:
+	print ("No ouput specified, exiting")
+	sys.exit(-1)
+
+    if not os.path.isdir(output_given):
+	try:
+	    os.mkdir(output_given)
+	except:
+	    print("Error, could not create dir %s" % output_given)
+	    sys.exit(-1)
+
+    files_given = os.path.abspath(files_given)
+    print("Input: %s\nOutput: %s" % (files_given, output_given))
+
+    outputdir = os.path.abspath(output_given)
+    os.chdir(outputdir)
+
+    if "-bin=nlbin" in args:
+	bin(files_given, outputdir)
+	print("Files written to: " + outputdir)
+	sys.exit()
+    elif "-bin=sauvola" in args:
+	bin(files_given, outputdir, False, True)
+	print("Files written to: " + outputdir)
+	sys.exit()
+    if "-dewarp" in args:
+	dewarp(files_given, outputdir)
+	print("Files written to: " + outputdir)
+	sys.exit()
+    if "-segmentation" in args:
+	segmentation(files_given, outputdir)
+	print("Files written to: " + outputdir)
+	sys.exit()
+    if "-hocr" in args:
+	hocr(files_given, outputdir)
+	print("Files written to: " + outputdir)
+	sys.exit()
+
+    if "-all" in args:
+	bin(files_given, outputdir)
+	files_given = outputdir + os.sep + "0001.bin.png"
+	segmentation(files_given, outputdir)
+	files_given = outputdir + os.sep + "0001"
+	hocr(files_given, outputdir, False)
+	print("Files written to: " + outputdir)
+	sys.exit()
+
+if __name__ == '__main__':
+    wrapper_main(sys.argv)
