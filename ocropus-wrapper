@@ -24,6 +24,13 @@ import subprocess
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# Example invocation
+#
+# ./ocropus-wrapper -bin=nlbin ./output.png ./out
+# ./ocropus-wrapper -segmentation ./out/0001.bin.png ./out
+# ./ocropus-wrapper -hocr ./out/0001 ./out
+#
+
 PATH_TO_OCROPUS = '/usr/local/bin'
 PATH_TO_SYSTEM_TMP = tempfile.gettempdir()
 
